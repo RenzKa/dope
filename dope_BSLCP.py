@@ -16,12 +16,17 @@ from collections import defaultdict
 import torch
 from torchvision.transforms import ToTensor
 
+import gc
+
 _thisdir = osp.realpath(osp.dirname(__file__))
 
 from model import dope_resnet50, num_joints
 import postprocess
 
 import visu
+
+def torch_to_list(torch_tensor):
+    return torch_tensor.cpu().numpy().tolist()
 
 
 class Dope():
@@ -80,6 +85,8 @@ class Dope():
         cap = cv2.VideoCapture(str(self.video_path))#'/users/katrin/coding/libs/segmentation/bsltrain/data/BSLCP/videos/Conversation/Belfast/1+2/BF1c.mov'))
         frame_nr = 0
         result = defaultdict(lambda: {})
+
+        list_cuda = []
         while(cap.isOpened()):
             ret, frame = cap.read()
             if ret==True:
@@ -107,13 +114,13 @@ class Dope():
         resolution = imlist[0].size()[-2:]
         
         # forward pass of the dope network
-        print('Running DOPE')
+        #print('Running DOPE')
         with torch.no_grad():
             results = self.model(imlist, None)[0]
 
         
         # postprocess results (pose proposals integration, wrists/head assignment)
-        print('Postprocessing')
+        #print('Postprocessing')
         assert self.postprocessing in ['nms','ppi']
         parts = ['body','hand','face']
         if self.postprocessing=='ppi':
@@ -146,7 +153,11 @@ class Dope():
             cv2.imwrite(outfile, imout)
             print(outfile)
 
-        return detections, results
+        results_cpu = {}
+        for x,y in results.items():
+            results_cpu[x] = torch_to_list(y)
+
+        return detections, results_cpu
         
 
 
