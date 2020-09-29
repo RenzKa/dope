@@ -116,17 +116,18 @@ class Dope_Predictor(nn.Module):
 
 
     def forward(self, x):   
+        # x -> (998, 2048)
         if x.dim() == 4:
             assert list(x.shape[2:]) == [1, 1]
         x = x.flatten(start_dim=1)
         scores = {}
         pose_deltas = {}
-        scores['body'] = self.body_cls_score(x)
-        pose_deltas['body'] = self.body_pose_pred(x)
-        scores['hand'] = self.hand_cls_score(x)
-        pose_deltas['hand'] = self.hand_pose_pred(x)
-        scores['face'] = self.face_cls_score(x)
-        pose_deltas['face'] = self.face_pose_pred(x)
+        scores['body'] = self.body_cls_score(x)  # (998, 21)
+        pose_deltas['body'] = self.body_pose_pred(x)  # (998, 1300)
+        scores['hand'] = self.hand_cls_score(x)  # (998, 11)
+        pose_deltas['hand'] = self.hand_pose_pred(x)  # (998, 1050)
+        scores['face'] = self.face_cls_score(x)  # (998, 11)
+        pose_deltas['face'] = self.face_pose_pred(x)  # (998, 1050)
         return scores, pose_deltas
 
 
@@ -163,8 +164,8 @@ class Dope_RoIHeads(RoIHeads):
     def forward(self, features, proposals, image_shapes, targets=None):
         """
         Arguments:
-            features (List[torch.Tensor])
-            proposals (List[torch.Tensor[N, 4]])
+            features (List[torch.Tensor])  (1, 1024, 26, 46)
+            proposals (List[torch.Tensor[N, 4]])  (998, 4)
             image_shapes (List[Tuple[H, W]])
             targets (List[Dict])
         """
@@ -176,13 +177,13 @@ class Dope_RoIHeads(RoIHeads):
                 hproposals = [p.float() for p in proposals] 
             else:
                 hproposals = proposals
-            dope_features = self.dope_roi_pool(features, hproposals, image_shapes)
+            dope_features = self.dope_roi_pool(features, hproposals, image_shapes)  # (998, 1024, 7, 7)
             dope_features = dope_features.half()          
         else:
             dope_features = self.dope_roi_pool(features, proposals, image_shapes)
             
         # head
-        dope_features = self.dope_head(dope_features)
+        dope_features = self.dope_head(dope_features)  #(998, 2048)
         
         # predictor
         class_logits, dope_regression = self.dope_predictor(dope_features)
@@ -269,7 +270,7 @@ def dope_resnet50(**dope_kwargs):
             x = self.resnet_backbone.layer1(x)
             x = self.resnet_backbone.layer2(x)
             x = self.resnet_backbone.layer3(x)
-            return x
+            return x #(1, 1024, 26, 46)
     resnet_body = ResNetBody(backbone)
     # build the anchor generator and pooler
     anchor_generator = AnchorGenerator(sizes=((32, 64, 128, 256, 512),), aspect_ratios=((0.5, 1.0, 2.0),))
