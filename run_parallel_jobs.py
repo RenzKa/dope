@@ -19,7 +19,7 @@ def make_jobsub_file(video_path, job_number):
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=48gb
+#SBATCH --mem=64gb
 #SBATCH --time=6:00:00
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1

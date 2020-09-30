@@ -127,7 +127,7 @@ class Dope_Predictor(nn.Module):
         scores['hand'] = self.hand_cls_score(x)  # (998, 11)
         pose_deltas['hand'] = self.hand_pose_pred(x)  # (998, 1050)
         scores['face'] = self.face_cls_score(x)  # (998, 11)
-        pose_deltas['face'] = self.face_pose_pred(x)  # (998, 1050)
+        pose_deltas['face'] = self.face_pose_pred(x)  # (998, 4200)
         return scores, pose_deltas
 
 

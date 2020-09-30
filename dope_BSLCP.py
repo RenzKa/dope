@@ -10,13 +10,16 @@ import cv2
 import numpy as np
 import pickle
 from pathlib import Path
+import time
 
+import multiprocessing as mp
+
+from zsvision.zs_multiproc import starmap_with_kwargs
 from collections import defaultdict
 
 import torch
 from torchvision.transforms import ToTensor
 
-import gc
 
 _thisdir = osp.realpath(osp.dirname(__file__))
 
@@ -38,6 +41,7 @@ class Dope():
 
 
     def load_model(self):
+        print('Load model')
         if self.postprocessing=='ppi':
             sys.path.append( _thisdir+'/lcrnet-v2-improved-ppi/')
             try:
@@ -55,10 +59,10 @@ class Dope():
             raise Exception('{:s} does not exist, please download the model first and place it in the models/ folder'.format(ckpt_fname))
         print('Loading model', self.modelname)
         self.ckpt = torch.load(ckpt_fname)
-        #ckpt['half'] = False # uncomment this line in case your device cannot handle half computation
+        self.ckpt['half'] = False # uncomment this line in case your device cannot handle half computation
         self.ckpt['dope_kwargs']['rpn_post_nms_top_n_test'] = 1000
         model = dope_resnet50(**self.ckpt['dope_kwargs'])
-        if self.ckpt['half']: model = model.half()
+        #if self.ckpt['half']: model = model.half()
         model = model.eval()
         model.load_state_dict(self.ckpt['state_dict'])
         self.model = model.to(self.device)
@@ -87,14 +91,18 @@ class Dope():
         result = defaultdict(lambda: {})
 
         list_cuda = []
+        print('Start')
         while(cap.isOpened()):
+            #start = time.time()
             ret, frame = cap.read()
+            
             if ret==True:
                 frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                detections, results = self.dope_single_image(frame, frame_nr)
+                detections = self.dope_single_image(frame, frame_nr)
                 frame_nr += 1
                 result[frame_nr]['det'] = detections
-                result[frame_nr]['res'] = results
+                #result[frame_nr]['res'] = results
+                #print(time.time() - start) 
 
         cap.release()
         with open(f'{save_path}/{Path(self.video_path).stem}_Dope.pkl', "wb") as f:
@@ -124,6 +132,7 @@ class Dope():
         assert self.postprocessing in ['nms','ppi']
         parts = ['body','hand','face']
         if self.postprocessing=='ppi':
+            torch.cuda.synchronize()
             res = {k: v.float().data.cpu().numpy() for k,v in results.items()}
             detections = {}
             for part in parts:
@@ -141,7 +150,7 @@ class Dope():
         detections = postprocess.assign_hands_and_head_to_body(detections)
         
         # display results
-        if frame_nr%200 == 0:
+        if frame_nr%500 == 0:
             print('Displaying')
             det_poses2d = {part: np.stack([d['pose2d'] for d in part_detections], axis=0) if len(part_detections)>0 else np.empty( (0,num_joints[part],2), dtype=np.float32) for part, part_detections in detections.items()}
             scores = {part: [d['score'] for d in part_detections] for part,part_detections in detections.items()}
@@ -153,11 +162,11 @@ class Dope():
             cv2.imwrite(outfile, imout)
             print(outfile)
 
-        results_cpu = {}
-        for x,y in results.items():
-            results_cpu[x] = torch_to_list(y)
+        # results_cpu = {}
+        # for x,y in results.items():
+        #     results_cpu[x] = torch_to_list(y)
 
-        return detections, results_cpu
+        return detections#, results_cpu
         
 
 
@@ -180,7 +189,7 @@ if __name__=="__main__":
     dope = Dope(Path(args.video_path), args.model, postprocessing=args.postprocess)
     dope.dope_videos()
 
-    #print('Loading image', imagename)
+    # print('Loading image', imagename)
     # image = Image.open('/users/katrin/coding/libs/dope/test_DOPErealtime_v1_0_0.jpg') 
     # dope.dope_single_image(image)
 
